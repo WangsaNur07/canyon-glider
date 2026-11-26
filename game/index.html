@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Canyon Glider — endless flight through the canyons</title>
+<style>
+  :root {
+    --ink: #fff7e8;
+    --ink-dim: #ffd9a8;
+    --accent: #ffb347;
+    --gold: #ffc93c;
+    --green: #4ade80;
+    --red: #ff5a5a;
+    --panel: rgba(20, 12, 8, 0.55);
+    --glow: 0 0 12px rgba(255, 179, 71, 0.55);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a0f0a; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- HUD ---------- */
+  .hud { position: fixed; z-index: 5; pointer-events: none; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid rgba(255, 179, 71, 0.35);
+    border-radius: 10px;
+    padding: 8px 12px;
+    backdrop-filter: blur(2px);
+  }
+  #hud-top-left {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
+  }
+  #hud-score { font-size: 34px; font-weight: 800; line-height: 1; color: var(--ink); text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  #hud-best { font-size: 12px; letter-spacing: 2px; color: var(--ink-dim); margin-top: 3px; }
+  #hud-combo { font-size: 16px; font-weight: 800; color: var(--gold); margin-top: 4px; min-height: 20px; text-shadow: 0 0 10px rgba(255, 201, 60, 0.8); }
+  #hud-combo.hot { color: #ff8a3c; }
+  #hud-top-right {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    text-align: right;
+    min-width: 190px;
+  }
+  #hud-missions { font-size: 12px; }
+  #hud-missions .mission { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; color: var(--ink-dim); }
+  #hud-missions .mission b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #hud-missions .mission.done { color: var(--green); text-decoration: line-through; }
+  #hud-damage {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%; transform: translateX(-50%);
+    font-size: 22px; letter-spacing: 4px; color: var(--red);
+    text-shadow: 0 0 10px rgba(255, 90, 90, 0.7);
+  }
+  #hud-damage.hurt { animation: pulse 0.5s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
+
+  /* bottom instruments */
+  #hud-bottom-left {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    display: flex; align-items: flex-end; gap: 10px;
+  }
+  .gauge { width: 14px; height: 90px; background: rgba(255, 255, 255, 0.12); border-radius: 7px; overflow: hidden; border: 1px solid rgba(255, 179, 71, 0.4); }
+  .gauge .fill { width: 100%; height: 100%; background: linear-gradient(to top, #ff8a3c, var(--gold)); transform-origin: bottom; transform: scaleY(0.4); }
+  #hud-alt { font-size: 26px; font-weight: 800; text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  .hud-label { font-size: 10px; letter-spacing: 2px; color: var(--ink-dim); }
+  #hud-bottom-center {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: 50%; transform: translateX(-50%);
+    text-align: center;
+  }
+  #hud-compass-wrap { width: 200px; overflow: hidden; border-bottom: 2px solid var(--accent); margin: 0 auto 4px; mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent); }
+  #hud-compass { display: flex; width: 720px; will-change: transform; }
+  #hud-compass span { flex: 0 0 45px; text-align: center; font-size: 11px; color: var(--ink-dim); }
+  #hud-heading { font-size: 18px; font-weight: 700; text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  #hud-bottom-right {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    text-align: right;
+  }
+  #hud-speed { font-size: 26px; font-weight: 800; text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  .bar { width: 150px; height: 10px; background: rgba(255, 255, 255, 0.12); border-radius: 5px; overflow: hidden; border: 1px solid rgba(255, 179, 71, 0.4); margin-top: 4px; }
+  .bar .fill { height: 100%; transform-origin: left; transform: scaleX(1); }
+  #hud-speed-fill { background: linear-gradient(to right, #38bdf8, #7dd3fc); }
+  #hud-fuel-fill { background: linear-gradient(to right, #22c55e, var(--green)); }
+  #hud-fuel-fill.low { background: linear-gradient(to right, #ef4444, #f97316); }
+  #hud-throttle-fill { background: linear-gradient(to right, #f59e0b, var(--gold)); }
+  #hud-fuel-text { font-size: 12px; color: var(--ink-dim); }
+
+  /* banner + toast */
+  #hud-banner {
+    top: 18%; left: 50%; transform: translate(-50%, -8px);
+    text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s;
+  }
+  #hud-banner.show { opacity: 1; transform: translate(-50%, 0); }
+  #hud-banner-title { font-size: 30px; font-weight: 800; letter-spacing: 2px; text-shadow: var(--glow); }
+  #hud-banner-sub { font-size: 14px; color: var(--ink-dim); margin-top: 4px; }
+  #hud-toast {
+    top: 30%; left: 50%; transform: translate(-50%, 0);
+    font-size: 20px; font-weight: 800; color: var(--gold);
+    text-shadow: 0 0 12px rgba(255, 201, 60, 0.8);
+    opacity: 0; transition: opacity 0.2s;
+  }
+  #hud-toast.show { opacity: 1; }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 20px;
+    background: linear-gradient(to bottom, rgba(26, 15, 10, 0.25), rgba(26, 15, 10, 0.72));
+  }
+  .overlay.hidden { display: none; }
+  /* the menu sits in the top half so the glider shows below it */
+  #overlay-menu { justify-content: flex-start; padding-top: 9vh; }
+  .overlay h1 {
+    font-size: min(64px, 11vw); font-weight: 900; letter-spacing: 3px;
+    color: var(--ink); text-shadow: 0 0 24px rgba(255, 140, 60, 0.9), 0 2px 0 rgba(0,0,0,0.4);
+  }
+  .overlay h2 { font-size: 15px; letter-spacing: 4px; color: var(--accent); margin-top: 6px; font-weight: 700; }
+  .overlay p { font-size: 15px; color: var(--ink-dim); margin-top: 14px; max-width: 420px; line-height: 1.55; }
+  .overlay .keys { font-size: 13px; color: var(--ink); margin-top: 10px; line-height: 1.8; background: var(--panel); border-radius: 10px; padding: 10px 16px; border: 1px solid rgba(255, 179, 71, 0.35); }
+  .overlay .keys b { color: var(--gold); }
+  .big-btn {
+    pointer-events: auto; cursor: pointer; margin-top: 22px;
+    font-size: 20px; font-weight: 800; letter-spacing: 2px; color: #241207;
+    background: linear-gradient(to bottom, #ffd166, #ff8a3c);
+    border: none; border-radius: 999px; padding: 14px 42px;
+    box-shadow: 0 6px 24px rgba(255, 140, 60, 0.55);
+  }
+  .big-btn:active { transform: translateY(2px); }
+  #menu-best { margin-top: 16px; font-size: 14px; color: var(--ink-dim); letter-spacing: 1px; }
+  #over-score { font-size: 58px; font-weight: 900; text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  #over-best { font-size: 14px; color: var(--ink-dim); letter-spacing: 2px; margin-top: 4px; }
+  #over-stats { font-size: 13px; color: var(--ink); margin-top: 12px; }
+  .hint { margin-top: 18px; font-size: 12px; color: var(--ink-dim); }
+  @media (prefers-reduced-motion: reduce) {
+    #hud-damage.hurt { animation: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<!-- HUD -->
+<div class="hud panel" id="hud-top-left">
+  <div id="hud-score">0</div>
+  <div id="hud-best">BEST 0</div>
+  <div id="hud-combo"></div>
+</div>
+<div class="hud panel" id="hud-top-right">
+  <div class="hud-label">MISSIONS</div>
+  <div id="hud-missions"></div>
+</div>
+<div class="hud" id="hud-damage">♥♥♥</div>
+<div class="hud" id="hud-bottom-left">
+  <div class="gauge"><div class="fill" id="hud-alt-fill"></div></div>
+  <div><div id="hud-alt">42 m</div><div class="hud-label">ALTITUDE</div></div>
+</div>
+<div class="hud" id="hud-bottom-center">
+  <div id="hud-compass-wrap"><div id="hud-compass"><span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span></div></div>
+  <div id="hud-heading">000° N</div>
+  <div class="hud-label">HEADING</div>
+</div>
+<div class="hud" id="hud-bottom-right">
+  <div id="hud-speed">94 km/h</div>
+  <div class="hud-label">SPEED</div>
+  <div class="bar"><div class="fill" id="hud-speed-fill"></div></div>
+  <div style="height:6px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="hud-label">FUEL</span><span id="hud-fuel-text">100%</span></div>
+  <div class="bar"><div class="fill" id="hud-fuel-fill"></div></div>
+  <div style="height:6px"></div>
+  <div class="hud-label">THROTTLE</div>
+  <div class="bar"><div class="fill" id="hud-throttle-fill"></div></div>
+</div>
+<div class="hud" id="hud-banner"><div id="hud-banner-title"></div><div id="hud-banner-sub"></div></div>
+<div class="hud" id="hud-toast"></div>
+
+<!-- Menu overlay -->
+<div class="overlay" id="overlay-menu">
+  <h1>CANYON GLIDER</h1>
+  <h2>ENDLESS FLIGHT THROUGH THE CANYONS</h2>
+  <p>Thread the rings, skim the pillars, and keep your fuel alive. Dive for speed, climb for air — and beat your best.</p>
+  <div class="keys">
+    <b>A / D</b> or <b>← / →</b> steer &nbsp;·&nbsp; <b>W / S</b> climb &amp; dive<br>
+    <b>Shift</b> boost (burns fuel) &nbsp;·&nbsp; <b>Space</b> airbrake<br>
+    <b>Drag</b> to steer on touch &nbsp;·&nbsp; <b>R</b> retry &nbsp;·&nbsp; <b>M</b> mute
+  </div>
+  <button class="big-btn" id="btn-fly">FLY</button>
+  <div id="menu-best">Your first flight awaits</div>
+</div>
+
+<!-- Game over overlay -->
+<div class="overlay hidden" id="overlay-over">
+  <h2>FLIGHT OVER</h2>
+  <div id="over-score">0</div>
+  <div id="over-best">Best: 0</div>
+  <div id="over-stats"></div>
+  <button class="big-btn" id="btn-retry">FLY AGAIN</button>
+  <div class="hint">Press R for an instant retry</div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
